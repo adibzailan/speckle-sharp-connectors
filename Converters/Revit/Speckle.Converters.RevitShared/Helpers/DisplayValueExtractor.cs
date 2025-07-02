@@ -22,6 +22,7 @@ public sealed class DisplayValueExtractor
   private readonly ITypedConverter<DB.PolyLine, SOG.Polyline> _polylineConverter;
   private readonly ITypedConverter<DB.Point, SOG.Point> _pointConverter;
   private readonly ITypedConverter<DB.PointCloudInstance, SOG.Pointcloud> _pointcloudConverter;
+  private readonly ITypedConverter<DB.Solid, SOG.Mesh>? _brepConverter;
   private readonly ILogger<DisplayValueExtractor> _logger;
   private readonly IConverterSettingsStore<RevitConversionSettings> _converterSettings;
 
@@ -35,7 +36,8 @@ public sealed class DisplayValueExtractor
     ITypedConverter<DB.Point, SOG.Point> pointConverter,
     ITypedConverter<DB.PointCloudInstance, SOG.Pointcloud> pointcloudConverter,
     ILogger<DisplayValueExtractor> logger,
-    IConverterSettingsStore<RevitConversionSettings> converterSettings
+    IConverterSettingsStore<RevitConversionSettings> converterSettings,
+    ITypedConverter<DB.Solid, SOG.Mesh>? brepConverter = null
   )
   {
     _meshByMaterialConverter = meshByMaterialConverter;
@@ -45,6 +47,7 @@ public sealed class DisplayValueExtractor
     _pointcloudConverter = pointcloudConverter;
     _logger = logger;
     _converterSettings = converterSettings;
+    _brepConverter = brepConverter;
   }
 
   public List<Base> GetDisplayValue(DB.Element element)
@@ -159,12 +162,59 @@ public sealed class DisplayValueExtractor
   {
     List<Base> displayValue = new();
 
-    // handle all solids and meshes by their material
-    var meshesByMaterial = GetMeshesByMaterial(collections.Meshes, collections.Solids);
-    List<SOG.Mesh> displayMeshes = _meshByMaterialConverter.Convert(
-      (meshesByMaterial, element.Id, ShouldSetElementDisplayToTransparent(element))
-    );
-    displayValue.AddRange(displayMeshes);
+    // Try BREP conversion first if available and enabled
+    if (_brepConverter != null && _converterSettings.Current.SendAsBREP && collections.Solids.Any())
+    {
+      foreach (var solid in collections.Solids)
+      {
+        try
+        {
+          var brepMesh = _brepConverter.Convert(solid);
+          if (brepMesh != null && brepMesh["hasBREP"] as bool? == true)
+          {
+            displayValue.Add(brepMesh);
+            
+            // If we have additional meshes, add them too
+            if (brepMesh["@additionalMeshes"] is List<SOG.Mesh> additionalMeshes)
+            {
+              displayValue.AddRange(additionalMeshes);
+            }
+          }
+          else
+          {
+            // Fallback to standard mesh conversion for this solid
+            AddSolidAsMesh(solid, element, displayValue);
+          }
+        }
+        catch (Exception ex)
+        {
+          _logger.LogWarning(ex, "Failed to convert solid to BREP, falling back to mesh");
+          AddSolidAsMesh(solid, element, displayValue);
+        }
+      }
+      
+      // Add any standalone meshes
+      if (collections.Meshes.Any())
+      {
+        var meshesByMaterial = collections.Meshes
+          .GroupBy(m => m.MaterialElementId)
+          .ToDictionary(g => g.Key, g => g.ToList());
+        
+        var meshes = _meshByMaterialConverter.Convert(
+          (meshesByMaterial, element.Id, ShouldSetElementDisplayToTransparent(element))
+        );
+        displayValue.AddRange(meshes);
+      }
+    }
+    else
+    {
+      // Standard mesh conversion path
+      var meshesByMaterial = GetMeshesByMaterial(collections.Meshes, collections.Solids);
+      List<SOG.Mesh> displayMeshes = _meshByMaterialConverter.Convert(
+        (meshesByMaterial, element.Id, ShouldSetElementDisplayToTransparent(element))
+      );
+      displayValue.AddRange(displayMeshes);
+    }
 
     // add rest of geometry
     foreach (var curve in collections.Curves)
@@ -183,6 +233,30 @@ public sealed class DisplayValueExtractor
     }
 
     return displayValue;
+  }
+
+  private void AddSolidAsMesh(DB.Solid solid, DB.Element element, List<Base> displayValue)
+  {
+    var solidMeshes = new Dictionary<DB.ElementId, List<DB.Mesh>>();
+    foreach (DB.Face face in solid.Faces)
+    {
+      var materialId = face.MaterialElementId;
+      if (!solidMeshes.ContainsKey(materialId))
+      {
+        solidMeshes[materialId] = new List<DB.Mesh>();
+      }
+
+      var mesh = face.Triangulate();
+      if (mesh != null)
+      {
+        solidMeshes[materialId].Add(mesh);
+      }
+    }
+
+    var meshes = _meshByMaterialConverter.Convert(
+      (solidMeshes, element.Id, ShouldSetElementDisplayToTransparent(element))
+    );
+    displayValue.AddRange(meshes);
   }
 
   private static Dictionary<DB.ElementId, List<DB.Mesh>> GetMeshesByMaterial(
