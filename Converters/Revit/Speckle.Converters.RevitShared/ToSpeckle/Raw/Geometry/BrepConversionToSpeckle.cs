@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace Speckle.Converters.RevitShared.ToSpeckle;
 /// Converts Revit Solid objects to Speckle BREP representation.
 /// This converter preserves surface information and topology, avoiding mesh triangulation.
 /// </summary>
-public class BrepConversionToSpeckle : ITypedConverter<DB.Solid, SOG.Mesh>
+public class BrepConversionToSpeckle : ITypedConverter<DB.Solid, SOG.Brep>
 {
   private readonly RevitConversionContextStack _contextStack;
   private readonly ILogger<BrepConversionToSpeckle> _logger;
@@ -44,47 +45,37 @@ public class BrepConversionToSpeckle : ITypedConverter<DB.Solid, SOG.Mesh>
   }
 
   /// <summary>
-  /// Converts a Revit Solid to a Speckle Mesh with BREP data stored in properties.
+  /// Converts a Revit Solid to a Speckle BREP representation.
   /// </summary>
   /// <remarks>
-  /// Since we need to return SOG.Mesh for compatibility, we store the BREP data
-  /// in the mesh's properties and set a flag indicating BREP availability.
+  /// This converter preserves surface information and topology, avoiding mesh triangulation.
+  /// Returns null if conversion fails.
   /// </remarks>
-  public SOG.Mesh Convert(DB.Solid target)
+  public SOG.Brep? Convert(DB.Solid target)
   {
+    if (target == null || target.Volume < 1e-6)
+    {
+      _logger.LogDebug("Solid is null or has negligible volume, skipping BREP conversion");
+      return null;
+    }
+
     try
     {
-      // First, try to convert to BREP
+      // Convert to BREP
       var brep = ConvertSolidToBrep(target);
       
       if (brep != null)
       {
-        // Create a display mesh for visualization
-        var displayMeshes = GetDisplayMeshes(target);
-        
-        // Use the first mesh as the base (or create an empty one)
-        var baseMesh = displayMeshes.FirstOrDefault() ?? new SOG.Mesh();
-        
-        // Store BREP data in the mesh properties
-        baseMesh["@brep"] = brep;
-        baseMesh["hasBREP"] = true;
-        
-        // If we have multiple display meshes, store them too
-        if (displayMeshes.Count > 1)
-        {
-          baseMesh["@additionalMeshes"] = displayMeshes.Skip(1).ToList();
-        }
-        
-        return baseMesh;
+        _logger.LogInformation("Successfully converted solid to BREP with {FaceCount} faces", brep.Faces?.Count ?? 0);
       }
+      
+      return brep;
     }
     catch (Exception ex)
     {
-      _logger.LogWarning(ex, "Failed to convert solid to BREP, falling back to mesh conversion");
+      _logger.LogError(ex, "Failed to convert solid to BREP");
+      return null;
     }
-    
-    // Fallback to standard mesh conversion
-    return GetDisplayMeshes(target).FirstOrDefault() ?? new SOG.Mesh();
   }
 
   private SOG.Brep? ConvertSolidToBrep(DB.Solid solid)

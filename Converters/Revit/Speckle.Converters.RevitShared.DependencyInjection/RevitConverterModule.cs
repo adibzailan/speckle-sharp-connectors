@@ -2,10 +2,12 @@ using Autodesk.Revit.DB;
 using Speckle.Autofac.DependencyInjection;
 using Speckle.Converters.Common;
 using Speckle.Converters.Common.DependencyInjection;
+using Speckle.Converters.Common.Objects;
 using Speckle.Converters.RevitShared.Helpers;
 using Speckle.Converters.RevitShared.Services;
 using Speckle.Converters.RevitShared.Settings;
 using Speckle.Converters.RevitShared.ToSpeckle;
+using SOG = Speckle.Objects.Geometry;
 
 namespace Speckle.Converters.RevitShared.DependencyInjection;
 
@@ -44,6 +46,7 @@ public class RevitConverterModule : ISpeckleModule
     builder.AddScoped<ParameterValueExtractor>();
     builder.AddScoped<ParameterValueSetter>();
     builder.AddScoped<DisplayValueExtractor>();
+    builder.AddScoped<ITypedConverter<Solid, SOG.Brep>, BrepConversionToSpeckle>();
     builder.AddScoped<ISlopeArrowExtractor, SlopeArrowExtractor>();
 
     builder.AddScoped<IRevitCategories, RevitCategories>();

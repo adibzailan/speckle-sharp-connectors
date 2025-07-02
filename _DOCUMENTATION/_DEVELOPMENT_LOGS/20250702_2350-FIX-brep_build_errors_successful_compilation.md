@@ -1,9 +1,9 @@
-# BREP Implementation Build Errors and Successful Compilation
-2 July 2025, 23:50
+# BREP Implementation Build Errors, DI Registration Fix, and Architecture Refactoring
+3 July 2025, 00:52
 
 ## Overview
 
-Successfully resolved critical build errors in the Speckle Revit connector BREP implementation, enabling compilation of the Revit-to-Rhino BREP geometry transfer feature. The errors stemmed from missing BREP-related parameters in the RevitConversionSettingsFactory and code analysis warnings treated as errors. This fix allows testing of the long-awaited BREP conversion functionality that preserves smooth surfaces instead of triangulated meshes.
+Successfully resolved critical build errors in the Speckle Revit connector BREP implementation and discovered a missing dependency injection registration that prevented BREP conversion from working. After initial testing revealed geometry was still being sent as meshes, investigation uncovered that the BrepConversionToSpeckle converter was never registered in the DI container. Additionally, refactored the entire BREP architecture to return native BREP objects instead of embedding them in mesh properties, aligning with how the Rhino connector expects to receive BREP data. This comprehensive fix enables true BREP geometry transfer from Revit to Rhino, preserving smooth surfaces and mathematical definitions.
 
 ---
 
@@ -30,6 +30,17 @@ true,  // BREPFallbackToMesh - default value
 - Installed .NET 8.0 SDK (v8.0.411) on Windows VM
 - Verified compatibility with global.json requirements
 - Successfully built Speckle.Revit.slnx solution
+
+4. **Missing Dependency Injection Registration (Critical Fix)**
+- Discovered BrepConversionToSpeckle was never registered in RevitConverterModule
+- Added registration: `builder.AddScoped<ITypedConverter<Solid, SOG.Brep>, BrepConversionToSpeckle>();`
+- Without this, the BREP converter was never used, causing fallback to mesh conversion
+
+5. **BREP Architecture Refactoring**
+- Changed BrepConversionToSpeckle from `ITypedConverter<DB.Solid, SOG.Mesh>` to `ITypedConverter<DB.Solid, SOG.Brep>`
+- Modified to return actual BREP objects instead of embedding in mesh properties
+- Updated DisplayValueExtractor to handle BREP objects directly
+- Aligned with Rhino connector's expectation of receiving native BREP objects
 
 ---
 
@@ -78,25 +89,72 @@ meshList.Add(mesh);  // Use captured reference
 - Platform: Any CPU
 - Target: Revit 2023 (only version installed)
 
+4. Dependency Injection Discovery:
+```csharp
+// The converter existed but was never registered!
+public class BrepConversionToSpeckle : ITypedConverter<DB.Solid, SOG.Brep>
+{
+    // Implementation was complete but never wired up
+}
+
+// Fixed by adding to RevitConverterModule:
+builder.AddScoped<ITypedConverter<Solid, SOG.Brep>, BrepConversionToSpeckle>();
+```
+
+5. Architecture Refactoring:
+```csharp
+// Before: Returned mesh with embedded BREP
+public SOG.Mesh Convert(DB.Solid target)
+{
+    var brep = ConvertSolidToBrep(target);
+    var mesh = new SOG.Mesh();
+    mesh["@brep"] = brep;  // Embedded approach
+    return mesh;
+}
+
+// After: Returns BREP directly
+public SOG.Brep? Convert(DB.Solid target)
+{
+    return ConvertSolidToBrep(target);  // Direct approach
+}
+```
+
 ---
 
 ## Testing/Validation
 
-1. Build Results:
+1. Initial Build Results:
 ```
 ========== Build: 26 succeeded, 0 failed, 0 up-to-date, 0 skipped ==========
 ========== Build completed at 11:56 PM and took 30.271 seconds ==========
 ```
 
-2. Output Locations Verified:
+2. Testing Revealed Issue:
+- Geometry still arriving as meshes in Rhino
+- Investigation found BrepConversionToSpeckle was never registered in DI container
+- Without registration, converter was created but never used
+
+3. Final Build Results (After All Fixes):
+```
+========== Rebuild All: 26 succeeded, 0 failed, 0 skipped ==========
+========== Rebuild completed at 12:52 AM and took 26.263 seconds ==========
+```
+
+4. Output Locations Verified:
 - Converter DLLs: `Converters\Revit\Speckle.Converters.Revit2023\bin\Release\net48\`
 - Connector DLLs: `Connectors\Revit\Speckle.Connectors.Revit2023\bin\Release\net48\`
 - Auto-deployment: `%AppData%\Autodesk\Revit\Addins\2023\`
 
-3. Key Components Built:
+5. Key Components Built:
 - Speckle.Converters.Revit2023.dll (contains BrepConversionToSpeckle)
 - Speckle.Connectors.Revit2023.dll (Revit plugin)
 - All dependencies and shared libraries
+
+6. Architecture Changes Verified:
+- BrepConversionToSpeckle now returns `SOG.Brep?` instead of `SOG.Mesh`
+- DisplayValueExtractor accepts `ITypedConverter<DB.Solid, SOG.Brep>?`
+- BREP objects added directly to display value list
+- Proper fallback to mesh conversion when BREP fails
 
 ---
 
@@ -159,28 +217,40 @@ meshList.Add(mesh);  // Use captured reference
 
 > This section provides a user-friendly explanation of technical changes that can be shared with non-technical stakeholders or end users.
 
-**🔧 Build Issues Fixed**
-Critical errors preventing the BREP feature from compiling have been resolved
-→ The Revit connector can now be built and tested with smooth surface support
+**🔧 Missing Link Found**
+Critical dependency injection registration was missing, preventing BREP converter from ever being used
+→ The converter existed but wasn't connected - now properly wired into the system
 
-**⚡ Code Quality Improvements**
-Performance optimizations and better error handling added to geometry processing
-→ More reliable conversions with clearer debugging when issues occur
+**🏗️ Architecture Aligned**
+Refactored BREP implementation to return native BREP objects instead of embedded data
+→ Now matches how Rhino expects to receive BREP geometry for proper surface reconstruction
 
-**🚀 Ready for Testing**
-Successfully compiled Revit 2023 connector with BREP conversion capability
-→ Users can now test sending smooth surfaces from Revit to Rhino
+**🚀 True BREP Transfer Enabled**
+Successfully built and registered all components for smooth surface transfer
+→ Geometry should now transfer as editable surfaces, not triangulated meshes
 
 ---
 
 # Critical Note for Handoff
 
-Intended for SOTA LLM analysis: This development log documents the resolution of build-blocking errors in the BREP implementation for Speckle's Revit connector. The primary issue was a parameter mismatch in RevitConversionSettingsFactory where the factory wasn't updated to include three new BREP-related parameters added to RevitConversionSettings. Secondary issues involved code analysis warnings that are treated as errors in Release builds.
+Intended for SOTA LLM analysis: This development log documents the resolution of build-blocking errors and a critical missing dependency injection registration in the BREP implementation for Speckle's Revit connector. 
 
-Key areas for future analysis:
-1. **Testing Protocol**: The built connector needs real-world testing with various Revit geometry types to validate BREP conversion
-2. **Performance Impact**: BREP conversion is computationally intensive - monitor conversion times for large models
-3. **Error Handling**: The InvalidOperationException catch may be too specific - consider if other exception types should be handled
-4. **Default Values**: The chosen BREP defaults (all enabled, 0.001 tolerance) may need adjustment based on testing results
+**Key Issues Resolved:**
+1. **Parameter Mismatch**: RevitConversionSettingsFactory wasn't updated to include three new BREP-related parameters
+2. **Code Analysis Warnings**: CA1031, CA1860, CA1854 warnings treated as errors in Release builds
+3. **Missing DI Registration**: BrepConversionToSpeckle converter was implemented but never registered in the dependency injection container, causing it to never be used
+4. **Architecture Mismatch**: Original implementation embedded BREP data in mesh properties, but Rhino expects native BREP objects
 
-The successful build enables testing of the BREP feature that has been in development across multiple sessions. Next critical step is launching Revit 2023 and verifying the geometry transfer pipeline works as designed.
+**Critical Discovery Process:**
+- Initial testing showed geometry still arriving as meshes despite successful build
+- Investigation revealed the converter was never registered: `builder.AddScoped<ITypedConverter<Solid, SOG.Brep>, BrepConversionToSpeckle>();`
+- Further analysis showed the embedding approach was incompatible with Rhino's BREP expectations
+- Refactored to return `SOG.Brep` objects directly, aligning with the Speckle object model
+
+**Key areas for future analysis:**
+1. **Testing Protocol**: Verify BREP objects are properly received and converted in Rhino
+2. **Performance Impact**: Monitor BREP vs mesh conversion performance on large models
+3. **Surface Type Coverage**: Test all surface types (planar, cylindrical, conical, ruled, etc.)
+4. **Error Resilience**: Ensure graceful fallback when BREP conversion fails
+
+The successful build and architecture alignment should now enable true BREP geometry transfer from Revit to Rhino. The missing DI registration was the critical blocker preventing the entire feature from functioning.

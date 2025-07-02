@@ -58,23 +58,20 @@ public class BrepConversionToSpeckleTests
   }
 
   [Test]
-  public void Convert_NullSolid_ReturnsFallbackMesh()
+  public void Convert_NullSolid_ReturnsNull()
   {
     // Arrange
     DB.Solid? nullSolid = null;
-    _meshByMaterialConverter.Setup(m => m.Convert(It.IsAny<Dictionary<DB.ElementId, List<DB.Mesh>>>()))
-      .Returns(new List<SOG.Mesh> { new SOG.Mesh() });
 
     // Act
     var result = _converter.Convert(nullSolid!);
 
     // Assert
-    Assert.IsNotNull(result);
-    Assert.IsFalse(result.ContainsKey("hasBREP"));
+    Assert.IsNull(result);
   }
 
   [Test]
-  public void Convert_ValidPlanarSolid_ReturnsMeshWithBrepData()
+  public void Convert_ValidPlanarSolid_ReturnsBrep()
   {
     // This test would require mocking Revit API objects which is complex
     // In a real implementation, you would use integration tests with actual Revit API

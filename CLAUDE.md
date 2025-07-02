@@ -109,8 +109,52 @@ When modifying the Speckle SDK alongside connectors:
 2. Debugger will launch host application
 3. Host application paths configured in `launchSettings.json`
 
+## Debugging and Verification
+
+### Using GraphQL to Verify Speckle Data
+When debugging geometry conversion (especially BREP), use Speckle's GraphQL API:
+
+1. **GraphQL Endpoint**: https://app.speckle.systems/graphql
+2. **Extract IDs from URL**: `projects/{projectId}/models/{modelId}`
+3. **Key Queries**:
+   ```graphql
+   # Get commit details
+   query {
+     project(id: "PROJECT_ID") {
+       model(id: "MODEL_ID") {
+         versions(limit: 10) {
+           items { id message createdAt referencedObject }
+         }
+       }
+     }
+   }
+   
+   # Check object data
+   query {
+     stream(id: "PROJECT_ID") {
+       object(id: "OBJECT_ID") {
+         data
+         children(limit: 100, depth: 3) {
+           objects { id speckleType data }
+         }
+       }
+     }
+   }
+   ```
+
+4. **Verify BREP Transfer**: Look for `speckle_type: "Objects.Geometry.Brep"` in displayValue arrays
+5. **See**: `_DOCUMENTATION/_SOLUTION_REVIEW/GraphQL_Guide_Checking_BREP_Data.md` for detailed guide
+
+### Common Debugging Steps
+1. Check dependency injection registration
+2. Verify converter settings (e.g., `SendAsBREP`)
+3. Enable debug logging for converters
+4. Use GraphQL to inspect sent data
+5. Check Revit journal files for suppressed errors
+
 ## Important Notes
 - Package versions centrally managed in `Directory.Packages.props`
 - Always use `IRootToSpeckleConverter` and `IRootToHostConverter` interfaces
 - Caching implemented via `SendConversionCache` - leverage for performance
 - Progress reporting via `IProgress<CardProgress>` throughout operations
+- Use GraphQL for debugging data transfer issues

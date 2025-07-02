@@ -22,7 +22,7 @@ public sealed class DisplayValueExtractor
   private readonly ITypedConverter<DB.PolyLine, SOG.Polyline> _polylineConverter;
   private readonly ITypedConverter<DB.Point, SOG.Point> _pointConverter;
   private readonly ITypedConverter<DB.PointCloudInstance, SOG.Pointcloud> _pointcloudConverter;
-  private readonly ITypedConverter<DB.Solid, SOG.Mesh>? _brepConverter;
+  private readonly ITypedConverter<DB.Solid, SOG.Brep>? _brepConverter;
   private readonly ILogger<DisplayValueExtractor> _logger;
   private readonly IConverterSettingsStore<RevitConversionSettings> _converterSettings;
 
@@ -37,7 +37,7 @@ public sealed class DisplayValueExtractor
     ITypedConverter<DB.PointCloudInstance, SOG.Pointcloud> pointcloudConverter,
     ILogger<DisplayValueExtractor> logger,
     IConverterSettingsStore<RevitConversionSettings> converterSettings,
-    ITypedConverter<DB.Solid, SOG.Mesh>? brepConverter = null
+    ITypedConverter<DB.Solid, SOG.Brep>? brepConverter = null
   )
   {
     _meshByMaterialConverter = meshByMaterialConverter;
@@ -106,6 +106,7 @@ public sealed class DisplayValueExtractor
     }
   }
 
+
   private Base GetCurveDisplayValue(DB.Curve curve) => (Base)_curveConverter.Convert(curve);
 
   private List<Base> GetGeometryDisplayValue(DB.Element element, DB.Options? options = null)
@@ -169,52 +170,26 @@ public sealed class DisplayValueExtractor
       {
         try
         {
-          var brepMesh = _brepConverter.Convert(solid);
-          if (brepMesh != null && brepMesh["hasBREP"] as bool? == true)
+          var brep = _brepConverter.Convert(solid);
+          if (brep != null)
           {
-            displayValue.Add(brepMesh);
-            
-            // If we have additional meshes, add them too
-            if (brepMesh["@additionalMeshes"] is List<SOG.Mesh> additionalMeshes)
-            {
-              displayValue.AddRange(additionalMeshes);
-            }
-          }
-          else
-          {
-            // Fallback to standard mesh conversion for this solid
-            AddSolidAsMesh(solid, element, displayValue);
+            displayValue.Add(brep);
+            _logger.LogDebug("Successfully converted solid to BREP with {FaceCount} faces", brep.Faces?.Count ?? 0);
           }
         }
         catch (InvalidOperationException ex)
         {
-          _logger.LogWarning(ex, "Failed to convert solid to BREP, falling back to mesh");
-          AddSolidAsMesh(solid, element, displayValue);
+          _logger.LogWarning(ex, "Failed to convert solid to BREP, skipping");
         }
       }
-      
-      // Add any standalone meshes
-      if (collections.Meshes.Count > 0)
-      {
-        var meshesByMaterial = collections.Meshes
-          .GroupBy(m => m.MaterialElementId)
-          .ToDictionary(g => g.Key, g => g.ToList());
-        
-        var meshes = _meshByMaterialConverter.Convert(
-          (meshesByMaterial, element.Id, ShouldSetElementDisplayToTransparent(element))
-        );
-        displayValue.AddRange(meshes);
-      }
     }
-    else
-    {
-      // Standard mesh conversion path
-      var meshesByMaterial = GetMeshesByMaterial(collections.Meshes, collections.Solids);
-      List<SOG.Mesh> displayMeshes = _meshByMaterialConverter.Convert(
-        (meshesByMaterial, element.Id, ShouldSetElementDisplayToTransparent(element))
-      );
-      displayValue.AddRange(displayMeshes);
-    }
+
+    // Always add mesh representation for visualization fallback
+    var meshesByMaterial = GetMeshesByMaterial(collections.Meshes, collections.Solids);
+    List<SOG.Mesh> displayMeshes = _meshByMaterialConverter.Convert(
+      (meshesByMaterial, element.Id, ShouldSetElementDisplayToTransparent(element))
+    );
+    displayValue.AddRange(displayMeshes);
 
     // add rest of geometry
     foreach (var curve in collections.Curves)
