@@ -163,7 +163,7 @@ public sealed class DisplayValueExtractor
     List<Base> displayValue = new();
 
     // Try BREP conversion first if available and enabled
-    if (_brepConverter != null && _converterSettings.Current.SendAsBREP && collections.Solids.Any())
+    if (_brepConverter != null && _converterSettings.Current.SendAsBREP && collections.Solids.Count > 0)
     {
       foreach (var solid in collections.Solids)
       {
@@ -186,7 +186,7 @@ public sealed class DisplayValueExtractor
             AddSolidAsMesh(solid, element, displayValue);
           }
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
           _logger.LogWarning(ex, "Failed to convert solid to BREP, falling back to mesh");
           AddSolidAsMesh(solid, element, displayValue);
@@ -194,7 +194,7 @@ public sealed class DisplayValueExtractor
       }
       
       // Add any standalone meshes
-      if (collections.Meshes.Any())
+      if (collections.Meshes.Count > 0)
       {
         var meshesByMaterial = collections.Meshes
           .GroupBy(m => m.MaterialElementId)
@@ -241,15 +241,16 @@ public sealed class DisplayValueExtractor
     foreach (DB.Face face in solid.Faces)
     {
       var materialId = face.MaterialElementId;
-      if (!solidMeshes.ContainsKey(materialId))
+      if (!solidMeshes.TryGetValue(materialId, out var meshList))
       {
-        solidMeshes[materialId] = new List<DB.Mesh>();
+        meshList = new List<DB.Mesh>();
+        solidMeshes[materialId] = meshList;
       }
 
       var mesh = face.Triangulate();
       if (mesh != null)
       {
-        solidMeshes[materialId].Add(mesh);
+        meshList.Add(mesh);
       }
     }
 

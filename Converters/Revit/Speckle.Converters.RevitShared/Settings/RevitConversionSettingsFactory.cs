@@ -29,6 +29,9 @@ public class RevitConversionSettingsFactory(
       sendEmptyOrNullParams,
       sendLinkedModels,
       sendRebarsAsVolumetric,
+      true, // SendAsBREP - default value
+      true, // BREPFallbackToMesh - default value
+      0.001, // BREPTolerance - default value in document units
       tolerance
     );
   }
