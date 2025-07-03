@@ -166,22 +166,63 @@ public sealed class DisplayValueExtractor
     // Try BREP conversion first if available and enabled
     if (_brepConverter != null && _converterSettings.Current.SendAsBREP && collections.Solids.Count > 0)
     {
+      _logger.LogDebug("Attempting BREP conversion for {SolidCount} solids from element {ElementId}", 
+        collections.Solids.Count, element.Id);
+      
+      int successCount = 0;
+      int failureCount = 0;
+      
       foreach (var solid in collections.Solids)
       {
         try
         {
+          // Skip invalid solids early
+          if (solid == null || solid.Volume < 1e-6)
+          {
+            _logger.LogDebug("Skipping null or negligible volume solid");
+            continue;
+          }
+          
           var brep = _brepConverter.Convert(solid);
           if (brep != null)
           {
             displayValue.Add(brep);
-            _logger.LogDebug("Successfully converted solid to BREP with {FaceCount} faces", brep.Faces?.Count ?? 0);
+            successCount++;
+            _logger.LogDebug("Successfully converted solid to BREP with {FaceCount} faces, volume: {Volume}", 
+              brep.Faces?.Count ?? 0, solid.Volume);
+          }
+          else
+          {
+            failureCount++;
+            _logger.LogWarning("BREP converter returned null for solid with {FaceCount} faces", solid.Faces.Size);
           }
         }
         catch (InvalidOperationException ex)
         {
-          _logger.LogWarning(ex, "Failed to convert solid to BREP, skipping");
+          failureCount++;
+          _logger.LogWarning(ex, "InvalidOperationException during BREP conversion for element {ElementId}", element.Id);
+        }
+        catch (Exception ex) when (!ex.IsFatal())
+        {
+          failureCount++;
+          _logger.LogError(ex, "Unexpected error during BREP conversion for element {ElementId}. Solid info: Faces={FaceCount}, Volume={Volume}", 
+            element.Id, solid.Faces.Size, solid.Volume);
         }
       }
+      
+      if (failureCount > 0)
+      {
+        _logger.LogWarning("BREP conversion completed with {SuccessCount} successes and {FailureCount} failures for element {ElementId}", 
+          successCount, failureCount, element.Id);
+      }
+    }
+    else if (_brepConverter == null)
+    {
+      _logger.LogWarning("BREP converter is null - dependency injection may have failed");
+    }
+    else if (!_converterSettings.Current.SendAsBREP)
+    {
+      _logger.LogDebug("BREP conversion disabled by settings");
     }
 
     // Always add mesh representation for visualization fallback

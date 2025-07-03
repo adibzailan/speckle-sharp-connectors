@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Speckle.Connectors.Common.Builders;
 using Speckle.Connectors.Common.Caching;
 using Speckle.Connectors.Common.Conversion;
-using Speckle.Connectors.Common.Extensions;
 using Speckle.Connectors.Common.Operations;
 using Speckle.Connectors.Common.Threading;
 using Speckle.Connectors.DUI.Exceptions;
@@ -18,6 +17,8 @@ using Speckle.Sdk.Models.Collections;
 
 namespace Speckle.Connectors.Revit.Operations.Send;
 
+#pragma warning disable CA1502 // Avoid excessive complexity
+#pragma warning disable CA1506 // Avoid excessive class coupling
 public class RevitRootObjectBuilder(
   IRootToSpeckleConverter converter,
   IConverterSettingsStore<RevitConversionSettings> converterSettings,
@@ -219,8 +220,29 @@ public class RevitRootObjectBuilder(
           }
           catch (Exception ex) when (!ex.IsFatal())
           {
-            logger.LogSendConversionError(ex, sourceType);
-            results.Add(new(Status.ERROR, applicationId, sourceType, null, ex));
+            // Gather element context for better error reporting
+            var elementInfo = new
+            {
+              ElementId = revitElement.Id.ToString(),
+              UniqueId = revitElement.UniqueId,
+              Name = revitElement.Name,
+              Category = revitElement.Category?.Name ?? "No category",
+              Type = sourceType,
+              Document = revitElement.Document.Title,
+              IsLinked = atomicObjectByDocumentAndTransform.Doc.IsLinked
+            };
+            
+            var contextualMessage = $"Failed to convert {elementInfo.Category} element '{elementInfo.Name}' (ID: {elementInfo.ElementId}){(elementInfo.IsLinked ? " from linked model" : "")}";
+            
+            logger.LogError(ex, "Conversion failed: {ContextualMessage}. Element details: {@ElementInfo}", contextualMessage, elementInfo);
+            
+            // Create a more informative exception for the results
+            var detailedException = new SpeckleException(
+              $"{contextualMessage}: {ex.Message}",
+              ex
+            );
+            
+            results.Add(new(Status.ERROR, applicationId, sourceType, null, detailedException));
           }
 
           onOperationProgressed.Report(new("Converting", (double)++countProgress / atomicObjectCount));
@@ -230,7 +252,39 @@ public class RevitRootObjectBuilder(
 
     if (results.All(x => x.Status == Status.ERROR) || skippedObjectCount == atomicObjectCount)
     {
-      throw new SpeckleException("Failed to convert all objects.");
+      // Create detailed error summary
+      var errorSummary = new System.Text.StringBuilder();
+      errorSummary.AppendLine($"Failed to convert all {atomicObjectCount} objects.");
+      errorSummary.AppendLine($"Errors: {results.Count(r => r.Status == Status.ERROR)}, Skipped: {skippedObjectCount}");
+      
+      // Group errors by error message pattern
+      var errorGroups = results
+        .Where(r => r.Status == Status.ERROR && r.Error != null && r.Error.Message != null)
+        .GroupBy(r => GetErrorMessageCategory(r.Error!.Message))
+        .OrderByDescending(g => g.Count());
+      
+      errorSummary.AppendLine("\nError Summary:");
+      foreach (var group in errorGroups.Take(5)) // Show top 5 error types
+      {
+        errorSummary.AppendLine($"  - {group.Key}: {group.Count()} occurrences");
+      }
+      
+      // Show first few detailed errors
+      errorSummary.AppendLine("\nFirst 3 errors:");
+      var detailedErrors = results
+        .Where(r => r.Status == Status.ERROR && r.Error != null && r.Error.Message != null)
+        .Take(3);
+      
+      foreach (var error in detailedErrors)
+      {
+        errorSummary.AppendLine($"  - {error.SourceType} ({error.SourceId}): {error.Error!.Message}");
+      }
+      
+      // Log all errors for debugging
+      logger.LogError("Conversion failed completely. Full error details: {@Results}", 
+        results.Where(r => r.Status == Status.ERROR).ToList());
+      
+      throw new SpeckleException(errorSummary.ToString());
     }
 
     var flatElements = atomicObjectsByDocumentAndTransform.SelectMany(t => t.Elements).ToList();
@@ -254,4 +308,44 @@ public class RevitRootObjectBuilder(
 
     return new RootObjectBuilderResult(rootObject, results);
   }
+  
+  private static string GetErrorMessageCategory(string errorMessage)
+  {
+    // Categorize common error patterns using IndexOf for .NET Framework compatibility
+    if (errorMessage.IndexOf("BREP", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "BREP Conversion Error";
+    }
+    if (errorMessage.IndexOf("geometry", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "Geometry Error";
+    }
+    if (errorMessage.IndexOf("parameter", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "Parameter Error";
+    }
+    if (errorMessage.IndexOf("deleted", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "Deleted Element";
+    }
+    if (errorMessage.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "Invalid Element";
+    }
+    if (errorMessage.IndexOf("null", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "Null Reference";
+    }
+    if (errorMessage.IndexOf("category", StringComparison.OrdinalIgnoreCase) >= 0)
+    {
+      return "Unsupported Category";
+    }
+    
+    // Return first 50 chars of message as category if no pattern matches
+#pragma warning disable IDE0057 // Substring can be simplified - not available in .NET Framework
+    return errorMessage.Length > 50 ? errorMessage.Substring(0, 50) + "..." : errorMessage;
+#pragma warning restore IDE0057
+  }
 }
+#pragma warning restore CA1502
+#pragma warning restore CA1506
