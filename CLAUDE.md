@@ -134,8 +134,34 @@ Example: When sending a Revit wall, the `RevitSendBinding` initiates the process
 
 ## Debugging and Verification
 
-### Using GraphQL to Verify Speckle Data
-When debugging geometry conversion (especially BREP), use Speckle's GraphQL API:
+### Using the GraphQL Debugger Tool
+A dedicated command-line tool is available for debugging Speckle data transfers:
+
+#### Quick Start
+```bash
+# Check for BREP data in a commit
+dotnet run --project Tools/Speckle.GraphQL.Debugger -- check-brep -p PROJECT_ID -o OBJECT_ID
+
+# List recent commits
+dotnet run --project Tools/Speckle.GraphQL.Debugger -- commits -p PROJECT_ID -m MODEL_ID
+
+# Analyze geometry types
+dotnet run --project Tools/Speckle.GraphQL.Debugger -- types -p PROJECT_ID -o OBJECT_ID
+
+# Interactive mode
+dotnet run --project Tools/Speckle.GraphQL.Debugger -- interactive
+```
+
+#### Key Features
+- **BREP Verification**: Instantly check if objects contain BREP geometry
+- **Commit Inspection**: List and examine commits without leaving IDE
+- **Geometry Analysis**: Get statistics on all geometry types
+- **Interactive Mode**: Run multiple queries in one session
+
+See `Tools/Speckle.GraphQL.Debugger/README.md` for full documentation.
+
+### Manual GraphQL Queries
+For custom queries, use Speckle's GraphQL API directly:
 
 1. **GraphQL Endpoint**: https://app.speckle.systems/graphql
 2. **Extract IDs from URL**: `projects/{projectId}/models/{modelId}`
@@ -172,7 +198,7 @@ When debugging geometry conversion (especially BREP), use Speckle's GraphQL API:
 1. Check dependency injection registration
 2. Verify converter settings (e.g., `SendAsBREP`)
 3. Enable debug logging for converters
-4. Use GraphQL to inspect sent data
+4. Use GraphQL debugger tool to inspect sent data: `dotnet run --project Tools/Speckle.GraphQL.Debugger -- check-brep -p PROJECT_ID -o OBJECT_ID`
 5. Check Revit journal files for suppressed errors
 
 ## Important Notes

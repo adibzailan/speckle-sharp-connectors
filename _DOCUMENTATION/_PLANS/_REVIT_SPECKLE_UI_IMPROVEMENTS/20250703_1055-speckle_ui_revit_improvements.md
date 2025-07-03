@@ -1,6 +1,6 @@
 # Revit Connector UI Improvements Plan
 
-**Date**: 2025-07-05  
+**Date**: 2025-07-05 (Updated)  
 **Status**: Proposed  
 
 ## Overview
@@ -83,6 +83,37 @@ public class BrowserBridge
   }
 }
 ```
+
+## Frontend Repository
+
+The UI frontend code is maintained in a separate repository: [speckle-connectors-dui](https://github.com/specklesystems/speckle-connectors-dui).
+
+### Repository Structure
+
+- **Technology Stack**:
+  - React with TypeScript
+  - Vite build system
+  - Tailwind CSS for styling
+
+- **Key Directories**:
+  - `src/` - Main source code
+  - `src/components/` - UI components (cards, buttons, dialogs)
+  - `src/bindings/` - JavaScript side of the bridge to communicate with C#
+  - `src/pages/` - Different UI views and screens
+
+- **Build Process**:
+  - The UI is built and deployed to Netlify
+  - The built URL is referenced in the `Url.cs` file in the .NET connector code
+
+### Development Workflow
+
+To modify the UI:
+
+1. Clone the repository: `git clone https://github.com/specklesystems/speckle-connectors-dui.git`
+2. Install dependencies: `npm install`
+3. Run locally: `npm run dev`
+4. Point connector to local server by modifying `Url.cs`
+5. Build for production: `npm run build`
 
 ## Improvement Opportunities
 
@@ -183,6 +214,75 @@ public static class Url
 }
 ```
 
+## Implementation Strategies With Frontend Repository Access
+
+Now that we have access to the frontend repository, here are strategies for implementing UI improvements:
+
+### 1. Local Development Workflow
+
+1. Clone the frontend repository:
+   ```bash
+   git clone https://github.com/specklesystems/speckle-connectors-dui.git
+   cd speckle-connectors-dui
+   npm install
+   ```
+
+2. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Modify the connector's `Url.cs` to point to your local server:
+   ```csharp
+   public static readonly Uri Netlify = new("http://localhost:3000/");
+   ```
+
+4. Make UI changes and test them directly in Revit
+
+### 2. Build and Embed Approach
+
+1. Make changes to the frontend code
+2. Build the UI:
+   ```bash
+   npm run build
+   ```
+3. Copy the built files to a local directory:
+   ```bash
+   cp -r dist/ C:/ProgramData/Speckle/Connectors/Revit/ui/
+   ```
+4. Modify `Url.cs` to use the local files:
+   ```csharp
+   public static readonly Uri Netlify = new("file:///C:/ProgramData/Speckle/Connectors/Revit/ui/index.html");
+   ```
+
+### 3. Coordinated Frontend-Backend Changes
+
+For features requiring both UI and backend changes:
+
+1. Create new bridge methods in C#:
+   ```csharp
+   public async Task<object> GetRevitTheme(object args)
+   {
+     // Determine if Revit is using dark or light theme
+     return new { isDarkTheme = IsRevitUsingDarkTheme() };
+   }
+   ```
+
+2. Add corresponding JavaScript in the frontend:
+   ```javascript
+   // In src/bindings/bridge.ts
+   export async function getRevitTheme() {
+     return await callBackend('getRevitTheme');
+   }
+   
+   // In src/components/ThemeProvider.tsx
+   useEffect(() => {
+     getRevitTheme().then(({ isDarkTheme }) => {
+       setTheme(isDarkTheme ? 'dark' : 'light');
+     });
+   }, []);
+   ```
+
 ## Implementation Plan
 
 ### Phase 1: Error Handling Improvements (2 weeks)
@@ -226,8 +326,35 @@ public static class Url
 - Performance benchmarks for optimizations
 - User testing with real-world scenarios
 
+## Integration with GraphQL Debugging Tool
+
+The recently implemented GraphQL debugging tool can be leveraged to improve the UI experience:
+
+1. **Error Diagnosis**: Use the GraphQL tool to diagnose issues when UI operations fail
+2. **Data Verification**: Verify data structures before displaying in UI
+3. **Performance Monitoring**: Track operation times and data sizes
+
+Example integration:
+```csharp
+public async Task VerifyAndSend(string modelCardId)
+{
+  // Send data to Speckle
+  var result = await _sendOperation.Execute(modelCardId);
+  
+  // Verify BREP data was sent correctly
+  var brepCheck = await _graphQLDebugService.CheckBrepPresence(result.StreamId, result.ObjectId);
+  
+  // Update UI with verification results
+  await _bridge.Send("sendComplete", new {
+    success = true,
+    brepVerified = brepCheck.HasBrep,
+    brepCount = brepCheck.BrepCount
+  });
+}
+```
+
 ## Conclusion
 
 The web-based UI approach used by the Speckle for Revit connector provides significant opportunities for improvement while maintaining native integration. By enhancing error reporting, improving the visual design, optimizing performance, and adding offline capabilities, we can create a more robust and user-friendly experience for Speckle users within Revit.
 
-This approach leverages modern web technologies while maintaining the benefits of native Revit integration, providing the best of both worlds for users and developers.
+With access to the frontend repository (speckle-connectors-dui), we can implement comprehensive UI improvements using a coordinated approach between the frontend and backend components. This enables us to create a more cohesive and responsive user experience while maintaining the benefits of the web-based UI architecture.
