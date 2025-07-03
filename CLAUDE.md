@@ -47,6 +47,29 @@ When modifying the Speckle SDK alongside connectors:
 - **DUI3**: Desktop UI framework in `DUI3/` using CefSharp WebView
 - **SDK**: Core libraries in `SDK/`
 
+### Sending Data to Speckle Cloud
+
+The process of pushing geometry to Speckle Cloud involves two main components:
+
+1. **Connectors**: Orchestrate the sending process by:
+   - Providing UI integration with host applications
+   - Managing send operations through `SendBinding` implementations
+   - Handling user interactions and model cards
+   - Initiating the conversion and sending pipeline
+
+2. **Converters**: Transform native geometry to Speckle format by:
+   - Converting application-specific objects to Speckle objects
+   - Implementing type-specific converters (points, meshes, BREPs, etc.)
+   - Handling unit conversions and coordinate systems
+   - Supporting fallback conversion paths when needed
+
+The typical data flow:
+```
+Host App Object → Converter → Speckle Object → Connector Send Operation → Speckle Cloud
+```
+
+Example: When sending a Revit wall, the `RevitSendBinding` initiates the process, while `WallToSpeckleConverter` transforms the wall into a Speckle object before transmission.
+
 ### Key Patterns
 
 #### Dependency Injection

@@ -37,7 +37,7 @@ public sealed class DisplayValueExtractor
     ITypedConverter<DB.PointCloudInstance, SOG.Pointcloud> pointcloudConverter,
     ILogger<DisplayValueExtractor> logger,
     IConverterSettingsStore<RevitConversionSettings> converterSettings,
-    ITypedConverter<DB.Solid, SOG.Brep>? brepConverter = null
+    ITypedConverter<DB.Solid, SOG.Brep>? brepConverter
   )
   {
     _meshByMaterialConverter = meshByMaterialConverter;
