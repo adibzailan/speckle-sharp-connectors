@@ -191,29 +191,6 @@ public async Task SendWithProgress(string modelCardId)
 }
 ```
 
-### 4. Offline Capabilities
-
-Current issue: Requires internet connection to load UI from Netlify
-
-Proposed improvement:
-- Package web assets with connector for offline use
-- Implement fallback mechanism when Netlify is unreachable
-- Cache previously loaded resources
-
-Implementation approach:
-```csharp
-public static class Url
-{
-  public static readonly Uri Netlify = new("https://boisterous-douhua-e3cefb.netlify.app/");
-  public static readonly Uri Local = new("file:///C:/ProgramData/Speckle/Connectors/Revit/ui/index.html");
-  
-  public static Uri GetPreferredSource()
-  {
-    return IsOnline() ? Netlify : Local;
-  }
-}
-```
-
 ## Implementation Strategies With Frontend Repository Access
 
 Now that we have access to the frontend repository, here are strategies for implementing UI improvements:
@@ -303,11 +280,6 @@ For features requiring both UI and backend changes:
 - Optimize data transfer
 - Test with large models
 
-### Phase 4: Offline Capabilities (1 week)
-- Package web assets with connector
-- Implement fallback mechanism
-- Add caching for resources
-
 ## Technical Considerations
 
 ### Cross-Version Compatibility
@@ -355,6 +327,6 @@ public async Task VerifyAndSend(string modelCardId)
 
 ## Conclusion
 
-The web-based UI approach used by the Speckle for Revit connector provides significant opportunities for improvement while maintaining native integration. By enhancing error reporting, improving the visual design, optimizing performance, and adding offline capabilities, we can create a more robust and user-friendly experience for Speckle users within Revit.
+The web-based UI approach used by the Speckle for Revit connector provides significant opportunities for improvement while maintaining native integration. By enhancing error reporting, improving the visual design and optimzing performance, we can create a more robust and user-friendly experience for Speckle users within Revit.
 
 With access to the frontend repository (speckle-connectors-dui), we can implement comprehensive UI improvements using a coordinated approach between the frontend and backend components. This enables us to create a more cohesive and responsive user experience while maintaining the benefits of the web-based UI architecture.
