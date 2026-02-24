@@ -92,6 +92,34 @@ Speckle.Revit.slnx
 
 ---
 
+## Latest Enhancement: Toast Notification Copy Functionality
+
+### Issue Identified
+During testing, discovered that while the error dialog had copy functionality, toast notifications (red error banners) did not provide a way to copy error messages to clipboard.
+
+### Solution Implemented
+Enhanced the `setNotification` function in `store/hostApp.ts` to automatically add copy buttons to error toast notifications:
+
+```typescript
+// Enhance error notifications with copy functionality
+if (notification && notification.type === ToastNotificationType.Danger && notification.description) {
+  notification.cta = {
+    title: 'Copy error',
+    onClick: async () => {
+      // Copy error message to clipboard with user feedback
+    }
+  }
+}
+```
+
+### Benefits
+- **Consistent UX**: All error notifications now have copy functionality
+- **Improved Accessibility**: Users can easily copy error messages for support
+- **Automatic Enhancement**: Works for all error notifications from C# backend
+- **User Feedback**: Shows success/failure notifications for copy operations
+
+---
+
 ## Future Considerations
 
 1. **Immediate TODOs**:

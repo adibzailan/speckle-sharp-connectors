@@ -8,7 +8,7 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
   <UserControl.Resources>
-    <wv2:CoreWebView2CreationProperties x:Key="EvergreenWebView2CreationProperties" UserDataFolder="C:\temp" />
+    <wv2:CoreWebView2CreationProperties x:Key="EvergreenWebView2CreationProperties" />
   </UserControl.Resources>
   <DockPanel>
     <wv2:WebView2 
